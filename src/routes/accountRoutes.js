@@ -309,9 +309,18 @@ app.get('/highest/:qt', async (req, res) => {
   }
 });
 
-// Alterar a agencia das contas da lista private para 99 
-// Implementacao de transacao
-app.get('/private', async (req, res) => {
+app.get('/private', async (req, res) => { 
+  try { 
+    // Seleciona apenas clientes que estao na agencia private
+    const accounts = await accountModel.find({ agencia: { $eq: 99 } });
+  
+    res.send(accounts);
+  } catch(err) {
+    res.status(500).send({ error: err.message });
+  }
+});
+
+app.post('/private', async (req, res) => {
   function compare(a, b) {
     return b.balance - a.balance || a.name.localeCompare(b.name);;
   }
@@ -327,7 +336,9 @@ app.get('/private', async (req, res) => {
   }
 
   try { 
-    const accounts = await accountModel.find({});
+
+    // Seleciona apenas clientes que nao estao na agencia private
+    const accounts = await accountModel.find({ agencia: { $ne: 99 } });
 
     const groupByBranch = groupBy('agencia');
     const accountsByBranch = groupByBranch(accounts);
@@ -337,6 +348,13 @@ app.get('/private', async (req, res) => {
       accountsByBranch[agencia].sort(compare);
       privateClients.push(accountsByBranch[agencia][0]);
     }
+
+    privateClients.forEach(async (cliente) => {
+      await accountModel.findByIdAndUpdate(
+        { _id: cliente.id }, 
+        { agencia: 99 }
+      )
+    }); 
 
     res.send(privateClients);
   } catch(err) {
