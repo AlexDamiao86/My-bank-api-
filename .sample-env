@@ -1,0 +1,6 @@
+PORT=
+PROTOCOL='mongodb+srv://'
+USERNAME=
+PASSWORD=
+DBNAME=
+HOSTNAME=
