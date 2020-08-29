@@ -24,4 +24,4 @@ const accountSchema = new mongoose.Schema({
 
 const accountModel = mongoose.model('account', accountSchema);
 
-export { accountModel };
+export { accountModel, mongoose as db };

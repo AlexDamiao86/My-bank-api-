@@ -1,5 +1,5 @@
 import express from 'express'; 
-import { accountModel } from '../models/accountModel.js';
+import { accountModel, db } from '../models/accountModel.js';
 
 const app = express();
 
@@ -91,42 +91,36 @@ app.post('/withdraw', async (req, res) => {
   }
 });
 
-// Aqui na entrada somente deverá ter numero de conta origem/destino
 // Implementacao de transacao 
 app.post('/transfer', async (req, res) => {
   const { 
-    agenciaOrigem, 
     contaOrigem, 
-    agenciaDestino, 
     contaDestino, 
     valorTransferencia } = req.body; 
   const valorTarifaTransferencia = 8.00; 
 
   try {
-
-    if (Number(agenciaOrigem) <= 0)
-      throw new Error('Agencia de Origem informada inválida..');
     
     if (Number(contaOrigem) <=0)
       throw new Error('Conta de Origem informada inválida..');
-
-    if (Number(agenciaDestino) <= 0)
-      throw new Error('Agencia de Destino informada inválida..');
     
     if (Number(contaDestino) <=0)
       throw new Error('Conta de Destino informada inválida..');
 
-    if (Number(agenciaOrigem) === Number(agenciaDestino) &&
-        Number(contaOrigem) === Number(contaDestino))
+    if (Number(contaOrigem) === Number(contaDestino))
     throw new Error('Contas de origem e destino não podem ser iguais');
 
     if (Number(valorTransferencia) <= 0) 
       throw new Error('Valor a ser sacado deve ser maior que 0');
 
+    // Inicia transacao 
+    const session = await db.startSession();
+    session.startTransaction();
+
+    // Consulta a conta origem pelo numero e obtem id, agencia e balance
     const accountOrigin = await accountModel.findOne({
-      agencia: agenciaOrigem, 
       conta: contaOrigem
-    }).exec();
+    }).session(session);
 
     if (!accountOrigin) { 
       res.status(404).send({ error: 'Conta de Origem informada inexistente..' });
@@ -134,12 +128,13 @@ app.post('/transfer', async (req, res) => {
     }
 
     const idOrigem = accountOrigin._id;
+    const agenciaOrigem = accountOrigin.agencia;
     const balanceOrigem = accountOrigin.balance;
 
+    // Consulta a conta destino pelo numero e obtem id, agencia e balance
     const accountTarget = await accountModel.findOne({
-      agencia: agenciaDestino, 
       conta: contaDestino
-    }).exec();
+    }).session(session);
 
     if (!accountTarget) { 
       res.status(404).send({ error: 'Conta de Destino informada inexistente..' });
@@ -147,11 +142,14 @@ app.post('/transfer', async (req, res) => {
     }
     
     const idDestino = accountTarget._id;
+    const agenciaDestino = accountTarget.agencia;
     const balanceDestino = accountTarget.balance;
 
     let valorTotalTransferencia = 0; 
 
-    if (Number(agenciaOrigem) !== Number(agenciaDestino)) {
+    // Taxa de transferencia de 8 reais caso transferencia para contas de 
+    // agencias diferentes
+    if (agenciaOrigem !== agenciaDestino) {
       valorTotalTransferencia = Number(valorTransferencia) + valorTarifaTransferencia;
     } else { 
       valorTotalTransferencia = Number(valorTransferencia)
@@ -163,21 +161,18 @@ app.post('/transfer', async (req, res) => {
     const newBalanceOrigem = balanceOrigem - valorTotalTransferencia;
     const newBalanceDestino = balanceDestino + valorTransferencia;
 
-    const contaOrigemAtualizada = await accountModel.updateOne(
+    await accountModel.findByIdAndUpdate(
       { _id: idOrigem }, 
       { balance: newBalanceOrigem }
-    );
-
-    if (contaOrigemAtualizada.nModified === 0)
-      throw new Error('Transferencia nao realizada.. tente novamente')
+    ).session(session);
     
-    const contaDestinoAtualizada = await accountModel.updateOne(
+    await accountModel.findByIdAndUpdate(
       { _id: idDestino }, 
       { balance: newBalanceDestino }
-    );
-  
-    if (contaDestinoAtualizada.nModified === 0)
-      throw new Error('Transferencia nao realizada.. tente novamente')
+    ).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
     
     res.send({ balance: newBalanceOrigem });
   } catch (err) {
