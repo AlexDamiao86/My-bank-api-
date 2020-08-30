@@ -3,6 +3,18 @@ import { accountModel, db } from '../models/accountModel.js';
 
 const app = express();
 
+function compareAgenciaConta(a, b) {
+  return a.agencia - b.agencia || a.conta - b.conta;
+}
+
+function compareSaldo(a, b) {
+  return a.balance - b.balance;
+}
+
+function compareSaldoDECNomeASC(a, b) {
+  return b.balance - a.balance || a.name.localeCompare(b.name);
+}
+
 app.post('/deposit', async (req, res) => {
   const { agencia, conta, valorDeposito } = req.body; 
   
@@ -261,9 +273,6 @@ app.get('/average/:agencia', async (req, res) => {
 });
 
 app.get('/lowest/:qt', async (req, res) => {
-  function compare(a, b) {
-    return a.balance - b.balance;
-  }
   try {
     const qtdeClientes = Number(req.params.qt);
 
@@ -274,7 +283,7 @@ app.get('/lowest/:qt', async (req, res) => {
       conta: account.conta,
       balance: account.balance
     }))
-    accounts.sort(compare);
+    accounts.sort(compareSaldo);
     accounts = accounts.slice(0, qtdeClientes);
 
     res.send(accounts);
@@ -285,9 +294,6 @@ app.get('/lowest/:qt', async (req, res) => {
 });
 
 app.get('/highest/:qt', async (req, res) => {
-  function compare(a, b) {
-    return b.balance - a.balance || a.name.localeCompare(b.name);
-  }
   try {
     const qtdeClientes = Number(req.params.qt);
 
@@ -299,7 +305,7 @@ app.get('/highest/:qt', async (req, res) => {
       name: account.name, 
       balance: account.balance
     }))
-    accounts.sort(compare);
+    accounts.sort(compareSaldoDECNomeASC);
     accounts = accounts.slice(0, qtdeClientes);
 
     res.send(accounts);
@@ -313,7 +319,7 @@ app.get('/private', async (req, res) => {
   try { 
     // Seleciona apenas clientes que estao na agencia private
     const accounts = await accountModel.find({ agencia: { $eq: 99 } });
-  
+    accounts.sort(compareAgenciaConta);
     res.send(accounts);
   } catch(err) {
     res.status(500).send({ error: err.message });
@@ -363,9 +369,9 @@ app.post('/private', async (req, res) => {
 });
 
 app.get('/', async (req, res) => {
-  const account = await accountModel.find({});
-
-  try {
+  try {  
+    const account = await accountModel.find({});
+    account.sort(compareAgenciaConta);
     res.send(account);
   } catch(err) {
     res.status(500).send({ error: err.message });
